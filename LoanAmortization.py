@@ -1,8 +1,16 @@
+import sys
+from enum import Enum
+from tabulate import tabulate
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy_financial as npf
-import sys
+
+
+class Payments(Enum):
+    ANNUAL = 0
+    MONTHLY = 1
 
 
 # Variables for the loan
@@ -12,6 +20,7 @@ import sys
 principal = 1_000_000
 interestRate = 0.07
 maturity = 25
+paymentSchedule = Payments.ANNUAL
 
 
 # Calculates annual payment given principal, interest rate, and maturity
@@ -21,11 +30,11 @@ def calculatePayment(principal, interestRate, maturity):
 
 
 # Creates a dataframe for the amortization schedule
-def getDf(principal, interestRate, payment, maturity):
+def getDf(principal, interestRate, payment, maturity, paymentSchedule):
     data = np.zeros((maturity, 4))
     remainingPrincipal = principal
 
-    # [Year, Remaining Principal, Interest Payment, Principal Payment]
+    # [Time, Remaining Principal, Interest Payment, Principal Payment]
     for i in range(0, maturity):
         data[i][0] = i + 1
         data[i][1] = remainingPrincipal
@@ -36,19 +45,19 @@ def getDf(principal, interestRate, payment, maturity):
     if (abs(remainingPrincipal) > 0.0001):
         sys.exit("Error creating loan schedule")
 
-    return pd.DataFrame(data, columns=["Year", "Remaining Principal", "Interest Payment", "Principal Payment"])
+    return pd.DataFrame(data, columns=[f"Time ({'Year' if paymentSchedule == Payments.ANNUAL else 'Month'})", "Remaining Principal", "Interest Payment", "Principal Payment"])
 
 
 # Creates a matplotlib plot showing the principal and interest payments over the loan lifespan
-def createPlot(df):
-    years = df["Year"]
+def createPlot(df, paymentSchedule):
+    time = df[f"Time ({'Year' if paymentSchedule == Payments.ANNUAL else 'Month'})"]
     interestPayments = df["Interest Payment"]
     principalPayments = df["Principal Payment"]
 
-    plt.plot(years, interestPayments, color='r', label="Interest Payments")
-    plt.plot(years, principalPayments, color='b', label="Principal Payments")
+    plt.plot(time, interestPayments, color='r', label="Interest Payments")
+    plt.plot(time, principalPayments, color='b', label="Principal Payments")
 
-    plt.xlabel("Year")
+    plt.xlabel(f"Time ({'Year' if paymentSchedule == Payments.ANNUAL else 'Month'})")
     plt.ylabel("Payment ($)")
     plt.title("Loan Payments")
     plt.legend()
@@ -58,10 +67,27 @@ def createPlot(df):
 
 
 # Create loan amortization schedule and plot
-def run(principal, interestRate, maturity):
+def run(principal, interestRate, maturity, paymentSchedule):
+    if (paymentSchedule == Payments.MONTHLY):
+        interestRate /= 12
+        maturity *= 12
+
     pmt = calculatePayment(principal, interestRate, maturity)
-    df = getDf(principal, interestRate, pmt, maturity)
-    createPlot(df)
+    df = getDf(principal, interestRate, pmt, maturity, paymentSchedule)
 
+    print(f"\nYour {'Annual' if paymentSchedule == Payments.ANNUAL else 'Monthly'} Payment: ${pmt.round(2):,}")
+    print()
+    
+    totalPayment = (pmt * maturity).round(2)
+    print(f"Total of {maturity} {'Annual' if paymentSchedule == Payments.ANNUAL else 'Monthly'} Payments: ${totalPayment:,}")
+    print()
 
-run(principal, interestRate, maturity)
+    totalInterestPaid = df["Interest Payment"].sum().round(2)
+    print(f"Total Interest Paid: ${totalInterestPaid:,}")
+    print()
+
+    print(tabulate(df, headers='keys', tablefmt='fancy_grid', showindex=False, ))
+
+    createPlot(df, paymentSchedule)
+
+run(principal, interestRate, maturity, paymentSchedule)
